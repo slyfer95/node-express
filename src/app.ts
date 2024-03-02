@@ -14,6 +14,7 @@ import compression from "compression";
 import { getClientIp } from "request-ip";
 import * as ev from "express-validator";
 import { Config } from "./config";
+var axios = require("axios");
 
 export type App = {
   requestListener: RequestListener;
@@ -111,13 +112,42 @@ export const initApp = async (
     res.sendStatus(200);
   });
 
-  app.get("/home", (req, res) => {
-    res.status(200).send({
-      name: "Waleed Ahmed",
-      age: "22",
-      height: "178 cm",
-      weight: "66 kg",
+  //////////////////////////////////////////////////////////
+  const getData = async () => {
+    var data = JSON.stringify({
+      collection: "sets",
+      database: "workouts",
+      dataSource: "Cluster0",
+      projection: {
+        _id: 1,
+      },
     });
+
+    var DBconfig = {
+      method: "post",
+      url: "https://ap-southeast-1.aws.data.mongodb-api.com/app/data-tegrm/endpoint/data/v1/action/findOne",
+      headers: {
+        "Content-Type": "application/json",
+        "Access-Control-Request-Headers": "*",
+        "api-key":
+          "eQgpU9AK1LQ7GKtLlsOK8YZgseW1qaqLPxLUoFVDeSX86101guKOtzUj8cNxzI7g",
+      },
+      data: data,
+    };
+
+    axios(DBconfig)
+      .then(function (response) {
+        console.log(JSON.stringify(response.data));
+      })
+      .catch(function (error) {
+        console.log(error);
+      });
+
+    return data;
+  };
+
+  app.get("/home", (req, res) => {
+    res.status(200).send(getData());
   });
 
   app.get("/hi", (req, res) => {
