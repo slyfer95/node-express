@@ -7,7 +7,6 @@ import express, {
   RequestHandler,
   Response,
 } from "express";
-import fetch from "node-fetch"; // Import fetch for making HTTP requests
 import "express-async-errors";
 import pino from "pino";
 import helmet from "helmet";
@@ -37,8 +36,6 @@ export const initApp = async (
   logger: pino.Logger
 ): Promise<App> => {
   const app = express();
-  const asl = new AsyncLocalStorage<Store>(); // Move asl creation here
-
   app.set("trust proxy", true);
   app.use(
     express.raw({
@@ -49,19 +46,21 @@ export const initApp = async (
   app.use(
     express.json({
       limit: "50kb",
-      type: (req) =>
-        req.headers["content-type"] === APPLICATION_JSON &&
-        req.url !== LARGE_JSON_PATH,
+      type: (req) => {
+        return (
+          req.headers["content-type"] === APPLICATION_JSON &&
+          req.url !== LARGE_JSON_PATH
+        );
+      },
     })
   );
-
   app.use((req, res, next) => {
     const start = new Date().getTime();
     const ac = new AbortController();
     req.abortSignal = ac.signal;
     res.on("close", ac.abort.bind(ac));
 
-    const requestId = req.headers["x-request-id"] || randomUUID();
+    const requestId = req.headers["x-request-id"]?.[0] || randomUUID();
 
     const l = logger.child({ requestId });
 
@@ -75,12 +74,14 @@ export const initApp = async (
     const oldEnd = res.end;
     res.write = function (chunk: Buffer | string, ...rest) {
       if (chunk) bytesWritten += chunk.length;
+
       // @ts-ignore
       return oldWrite.apply(res, [chunk, ...rest]);
     };
     // @ts-ignore
     res.end = function (chunk?: Buffer | string, ...rest) {
       if (chunk) bytesWritten += chunk.length;
+
       // @ts-ignore
       return oldEnd.apply(res, [chunk, ...rest]);
     };
@@ -103,7 +104,6 @@ export const initApp = async (
 
     asl.run({ logger: l, requestId }, () => next());
   });
-
   app.use(helmet());
   app.use(compression());
 
@@ -111,39 +111,13 @@ export const initApp = async (
     res.sendStatus(200);
   });
 
-  //////////////////////////////////////////////////////////
-  const getData = async () => {
-    try {
-      const response = await fetch(
-        "https://ap-southeast-1.aws.data.mongodb-api.com/app/data-tegrm/endpoint/data/v1/action/findOne",
-        {
-          method: "post",
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Control-Request-Headers": "*",
-            "api-key":
-              "eQgpU9AK1LQ7GKtLlsOK8YZgseW1qaqLPxLUoFVDeSX86101guKOtzUj8cNxzI7g",
-          },
-          body: JSON.stringify({
-            collection: "sets",
-            database: "workouts",
-            dataSource: "Cluster0",
-          }),
-        }
-      );
-
-      const data = await response.json();
-      console.log(JSON.stringify(data));
-      return data;
-    } catch (error) {
-      console.error(error);
-      throw error;
-    }
-  };
-
-  app.get("/home", async (req, res) => {
-    const data = await getData();
-    res.status(200).json(data);
+  app.get("/home", (req, res) => {
+    res.status(200).send({
+      name: "Waleed Ahmed",
+      age: "22",
+      height: "178 cm",
+      weight: "66 kg",
+    });
   });
 
   app.get("/hi", (req, res) => {
