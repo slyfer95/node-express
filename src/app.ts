@@ -7,6 +7,7 @@ import express, {
   RequestHandler,
   Response,
 } from "express";
+import fetch from "node-fetch"; // Import fetch for making HTTP requests
 import "express-async-errors";
 import pino from "pino";
 import helmet from "helmet";
@@ -36,6 +37,8 @@ export const initApp = async (
   logger: pino.Logger
 ): Promise<App> => {
   const app = express();
+  const asl = new AsyncLocalStorage<Store>(); // Move asl creation here
+
   app.set("trust proxy", true);
   app.use(
     express.raw({
@@ -46,21 +49,19 @@ export const initApp = async (
   app.use(
     express.json({
       limit: "50kb",
-      type: (req) => {
-        return (
-          req.headers["content-type"] === APPLICATION_JSON &&
-          req.url !== LARGE_JSON_PATH
-        );
-      },
+      type: (req) =>
+        req.headers["content-type"] === APPLICATION_JSON &&
+        req.url !== LARGE_JSON_PATH,
     })
   );
+
   app.use((req, res, next) => {
     const start = new Date().getTime();
     const ac = new AbortController();
     req.abortSignal = ac.signal;
     res.on("close", ac.abort.bind(ac));
 
-    const requestId = req.headers["x-request-id"]?.[0] || randomUUID();
+    const requestId = req.headers["x-request-id"] || randomUUID();
 
     const l = logger.child({ requestId });
 
@@ -74,14 +75,12 @@ export const initApp = async (
     const oldEnd = res.end;
     res.write = function (chunk: Buffer | string, ...rest) {
       if (chunk) bytesWritten += chunk.length;
-
       // @ts-ignore
       return oldWrite.apply(res, [chunk, ...rest]);
     };
     // @ts-ignore
     res.end = function (chunk?: Buffer | string, ...rest) {
       if (chunk) bytesWritten += chunk.length;
-
       // @ts-ignore
       return oldEnd.apply(res, [chunk, ...rest]);
     };
@@ -104,6 +103,7 @@ export const initApp = async (
 
     asl.run({ logger: l, requestId }, () => next());
   });
+
   app.use(helmet());
   app.use(compression());
 
@@ -113,38 +113,37 @@ export const initApp = async (
 
   //////////////////////////////////////////////////////////
   const getData = async () => {
-    var axios = require("axios");
-    var data = JSON.stringify({
-      collection: "sets",
-      database: "workouts",
-      dataSource: "Cluster0",
-    });
+    try {
+      const response = await fetch(
+        "https://ap-southeast-1.aws.data.mongodb-api.com/app/data-tegrm/endpoint/data/v1/action/findOne",
+        {
+          method: "post",
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Control-Request-Headers": "*",
+            "api-key":
+              "eQgpU9AK1LQ7GKtLlsOK8YZgseW1qaqLPxLUoFVDeSX86101guKOtzUj8cNxzI7g",
+          },
+          body: JSON.stringify({
+            collection: "sets",
+            database: "workouts",
+            dataSource: "Cluster0",
+          }),
+        }
+      );
 
-    var DBconfig = {
-      method: "post",
-      url: "https://ap-southeast-1.aws.data.mongodb-api.com/app/data-tegrm/endpoint/data/v1/action/findOne",
-      headers: {
-        "Content-Type": "application/json",
-        "Access-Control-Request-Headers": "*",
-        "api-key":
-          "eQgpU9AK1LQ7GKtLlsOK8YZgseW1qaqLPxLUoFVDeSX86101guKOtzUj8cNxzI7g",
-      },
-      data: data,
-    };
-
-    axios(DBconfig)
-      .then(function (response) {
-        console.log(JSON.stringify(response.data));
-      })
-      .catch(function (error) {
-        console.log(error);
-      });
-
-    return data;
+      const data = await response.json();
+      console.log(JSON.stringify(data));
+      return data;
+    } catch (error) {
+      console.error(error);
+      throw error;
+    }
   };
 
-  app.get("/home", (req, res) => {
-    res.status(200).send(getData());
+  app.get("/home", async (req, res) => {
+    const data = await getData();
+    res.status(200).json(data);
   });
 
   app.get("/hi", (req, res) => {
@@ -209,8 +208,6 @@ type Store = {
   logger: pino.Logger;
   requestId: string;
 };
-
-const asl = new AsyncLocalStorage<Store>();
 
 export function makeValidationMiddleware(
   runners: ev.ContextRunner[]
