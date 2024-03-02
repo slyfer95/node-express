@@ -14,7 +14,6 @@ import compression from "compression";
 import { getClientIp } from "request-ip";
 import * as ev from "express-validator";
 import { Config } from "./config";
-var axios = require("axios");
 
 export type App = {
   requestListener: RequestListener;
@@ -114,13 +113,11 @@ export const initApp = async (
 
   //////////////////////////////////////////////////////////
   const getData = async () => {
+    var axios = require("axios");
     var data = JSON.stringify({
       collection: "sets",
       database: "workouts",
       dataSource: "Cluster0",
-      projection: {
-        _id: 1,
-      },
     });
 
     var DBconfig = {
