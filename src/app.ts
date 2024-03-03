@@ -56,56 +56,7 @@ export const initApp = async (
       },
     })
   );
-  app.use((req, res, next) => {
-    const start = new Date().getTime();
-    const ac = new AbortController();
-    req.abortSignal = ac.signal;
-    res.on("close", ac.abort.bind(ac));
 
-    const requestId = req.headers["x-request-id"]?.[0] || randomUUID();
-
-    const l = logger.child({ requestId });
-
-    let bytesRead = 0;
-    req.on("data", (chunk: Buffer) => {
-      bytesRead += chunk.length;
-    });
-
-    let bytesWritten = 0;
-    const oldWrite = res.write;
-    const oldEnd = res.end;
-    res.write = function (chunk: Buffer | string, ...rest) {
-      if (chunk) bytesWritten += chunk.length;
-
-      // @ts-ignore
-      return oldWrite.apply(res, [chunk, ...rest]);
-    };
-    // @ts-ignore
-    res.end = function (chunk?: Buffer | string, ...rest) {
-      if (chunk) bytesWritten += chunk.length;
-
-      // @ts-ignore
-      return oldEnd.apply(res, [chunk, ...rest]);
-    };
-
-    res.on("finish", () => {
-      l.info(
-        {
-          duration: new Date().getTime() - start,
-          method: req.method,
-          path: req.path,
-          status: res.statusCode,
-          ua: req.headers["user-agent"],
-          ip: getClientIp(req),
-          br: bytesRead,
-          bw: bytesWritten,
-        },
-        "Request handled"
-      );
-    });
-
-    asl.run({ logger: l, requestId }, () => next());
-  });
   app.use(helmet());
   app.use(compression());
 
@@ -120,12 +71,6 @@ export const initApp = async (
     } catch (error: any) {
       res.status(500).json({ message: error.message });
     }
-  });
-
-  app.get("/hi", (req, res) => {
-    const s = asl.getStore();
-    s?.logger.info("hi");
-    res.send("hi");
   });
 
   mongoose
@@ -168,15 +113,6 @@ export const initApp = async (
     }
     const users = await usersRes.json();
     res.json(users);
-  });
-
-  app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-    asl.getStore()?.logger.error(err);
-
-    if (res.headersSent) return;
-
-    res.status(500);
-    res.json({ msg: "Something went wrong" });
   });
 
   return {
