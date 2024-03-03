@@ -14,7 +14,8 @@ import compression from "compression";
 import { getClientIp } from "request-ip";
 import * as ev from "express-validator";
 import { Config } from "./config";
-const axios = require("axios");
+const mongoose = require("mongoose");
+const Exercise = require("./models/exercises.model.js");
 
 export type App = {
   requestListener: RequestListener;
@@ -112,40 +113,27 @@ export const initApp = async (
     res.sendStatus(200);
   });
 
+  app.get("/exercises", async (req, res) => {
+    try {
+      const exercises = await Exercise.find({});
+      res.status(200).json(exercises);
+    } catch (error: any) {
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get("/hi", (req, res) => {
     const s = asl.getStore();
     s?.logger.info("hi");
     res.send("hi");
   });
 
-  app.get("/workouts", async (req, res) => {
-    try {
-      const data = JSON.stringify({
-        collection: "sets",
-        database: "workouts",
-        dataSource: "Cluster0",
-      });
-
-      const config = {
-        method: "post",
-        url: "https://ap-southeast-1.aws.data.mongodb-api.com/app/data-tegrm/endpoint/data/v1/action/find",
-        headers: {
-          "Content-Type": "application/json",
-          "Access-Control-Request-Headers": "*",
-          "api-key":
-            "3jTx1QNw0d0Lgn0HZ3sN10vdf26mdYraV8HCsblSMAMe0JbY6WEqODvlPZ3P9Feg",
-        },
-        data,
-      };
-
-      const response = await axios(config);
-
-      res.json(response.data); // Send the parsed JSON response directly
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Error fetching data"); // Handle errors gracefully
-    }
-  });
+  mongoose
+    .connect(
+      "mongodb+srv://barozai:Slyfer@95@cluster0.pxsz1op.mongodb.net/workouts?retryWrites=true&w=majority&appName=Cluster0"
+    )
+    .then(() => console.log("Connected!"))
+    .catch(() => console.warn("Connection Failed"));
 
   app.post(
     "/echo",
